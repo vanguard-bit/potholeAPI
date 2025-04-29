@@ -1,4 +1,5 @@
 # app.py
+import folium
 from flask import Flask, request, jsonify, Response
 import search_ward
 import torch.nn.functional as F
@@ -755,11 +756,21 @@ def get_ward_details():
 
     ward_data, ward_id = search_ward.search_ward_by_coordinates_firestore(longitude, latitude)
 
-    if ward_data:
-        ward_data.pop("coordinates")
-        return jsonify(ward_data), 200
-    else:
+    if not ward_data:
         return jsonify({'error': 'Ward not found for the given coordinates.'}), 404
+    ward_details = []
+    ward_details.append("Assembly Name: " + ward_data.get("assembly_constituency_name_en","N/A")) # added .get and default value
+    ward_details.append("Parliamentary Name: " + ward_data.get("parliamentary_constituency_name_en","N/A")) # added .get and default value
+    ward_details.append("Ward Name: " + ward_data.get("proposed_ward_name_en","N/A")) # added .get and default value
+
+    m = folium.Map(location=[latitude, longitude], zoom_start=13)
+
+    folium.Marker(
+        location=[latitude, longitude],
+        popup="<br>".join(ward_details),
+        icon=folium.Icon(color="blue", icon="info-sign")
+    ).add_to(m)
+    return Response(m.get_root().render(), mimetype='text/html')
 
 @app.route('/map/<category_name>')
 def show_map(category_name):
