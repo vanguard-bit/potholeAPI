@@ -1,3 +1,6 @@
 __pycache__
 env
 serviceAccountKey.json
+test.py
+extracted_data.json
+output

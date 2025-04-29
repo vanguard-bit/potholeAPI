@@ -1,5 +1,6 @@
 # app.py
 from flask import Flask, request, jsonify, Response
+import search_ward
 import torch.nn.functional as F
 import make_maps
 import os
@@ -85,7 +86,6 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
 def process_image(image_data, models):
     # Convert base64 to image
-    print(image_data)
     image_bytes = base64.b64decode(image_data)
     image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
     
@@ -217,7 +217,8 @@ def store_issue(issue_data, image_embedding, text_embedding, image_category, tex
     # Check for similar issues to increment counter
     nearby_issues = find_nearby_issues(issue_data['latitude'], issue_data['longitude'], radius=50)  # Smaller radius for exact location
     similar_issues = []
-    
+    _, ward_id = search_ward.search_ward_by_coordinates_firestore(issue_data['longitude'], issue_data['latitude'])
+
     for issue in nearby_issues:
         # Get issue embedding
         issue_image_embedding, _ = get_issue_embedding(issue['issue_id'])
@@ -250,7 +251,8 @@ def store_issue(issue_data, image_embedding, text_embedding, image_category, tex
         'text_embedding': text_embedding_base64,
         'similar_count': similar_count,  # Adding the counter for similar issues
         'image_category': image_category,  # Store original detected categories for reference
-        'text_category': text_category
+        'text_category': text_category,
+        'ward_id' : ward_id
     })
     
     # Update similar issues' counters
@@ -324,14 +326,13 @@ def get_issue_embedding(issue_id):
         if not image_embedding_base64.startswith(("/9j", "iVBORw0KGgo")):
             return None, None
         
-        if image_embedding_base64 and text_embedding_base64:
-            image_embedding_bytes = base64.b64decode(image_embedding_base64)
-            image_embedding = np.frombuffer(image_embedding_bytes, dtype=np.float32)
-            
-            text_embedding_bytes = base64.b64decode(text_embedding_base64)
-            text_embedding = np.frombuffer(text_embedding_bytes, dtype=np.float32)
-            print("store_issue") 
-            return process_image(image_embedding_base64, app.config['models'])['embedding'], text_embedding
+        # if image_embedding_base64 and text_embedding_base64:
+        #     image_embedding_bytes = base64.b64decode(image_embedding_base64)
+        #     image_embedding = np.frombuffer(image_embedding_bytes, dtype=np.float32)
+        #
+        text_embedding_bytes = base64.b64decode(text_embedding_base64)
+        text_embedding = np.frombuffer(text_embedding_bytes, dtype=np.float32)
+        return process_image(image_embedding_base64, app.config['models'])['embedding'], text_embedding
     
     return None, None
 
@@ -734,6 +735,31 @@ def initialize_app(app):
     app.config['models'] = initialize_models()
     
     return app
+
+@app.route('/ward_details', methods=['GET'])
+def get_ward_details():
+    """
+    Retrieves the ward details for a given latitude and longitude from the Firestore database.
+    Uses the Winding Number Algorithm for Point in Polygon (PIP) determination.
+
+    Returns:
+        jsonify: A JSON response containing the ward details if found, or an error message.
+    """
+    try:
+        latitude = float(request.args.get('latitude'))
+        longitude = float(request.args.get('longitude'))
+    except ValueError:
+        return jsonify({'error': 'Invalid latitude or longitude.  Must be numeric.'}), 400
+    except TypeError:
+        return jsonify({'error': 'Invalid latitude or longitude.  Must be provided.'}), 400
+
+    ward_data, ward_id = search_ward.search_ward_by_coordinates_firestore(longitude, latitude)
+
+    if ward_data:
+        ward_data.pop("coordinates")
+        return jsonify(ward_data), 200
+    else:
+        return jsonify({'error': 'Ward not found for the given coordinates.'}), 404
 
 @app.route('/map/<category_name>')
 def show_map(category_name):

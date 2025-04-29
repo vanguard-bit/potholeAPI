@@ -1,6 +1,7 @@
 # map_utils.py
 
 import folium
+import search_ward
 
 def generate_category_map(db, category_name):
     """
