@@ -85,6 +85,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
 def process_image(image_data, models):
     # Convert base64 to image
+    print(image_data)
     image_bytes = base64.b64decode(image_data)
     image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
     
@@ -320,6 +321,8 @@ def get_issue_embedding(issue_id):
         
         image_embedding_base64 = issue_data.get('image_embedding')
         text_embedding_base64 = issue_data.get('text_embedding')
+        if not image_embedding_base64.startswith(("/9j", "iVBORw0KGgo")):
+            return None, None
         
         if image_embedding_base64 and text_embedding_base64:
             image_embedding_bytes = base64.b64decode(image_embedding_base64)
@@ -327,8 +330,8 @@ def get_issue_embedding(issue_id):
             
             text_embedding_bytes = base64.b64decode(text_embedding_base64)
             text_embedding = np.frombuffer(text_embedding_bytes, dtype=np.float32)
-            
-            return process_image(image_embedding, app.config['modeks'])['embedding'], text_embedding
+            print("store_issue") 
+            return process_image(image_embedding_base64, app.config['models'])['embedding'], text_embedding
     
     return None, None
 
